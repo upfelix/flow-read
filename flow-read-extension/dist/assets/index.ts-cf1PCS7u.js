@@ -1,0 +1,1 @@
+chrome.action.onClicked.addListener(e=>{e.id&&chrome.tabs.sendMessage(e.id,{type:"TOGGLE_READER"}).catch(t=>{console.warn("Could not send message to content script. It might not be loaded yet.",t)})});

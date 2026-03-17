@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "FlowRead",
+  "version": "1.0.0",
+  "description": "Zero-distraction reading and highlighting extension",
+  "action": {
+    "default_title": "Enable FlowRead"
+  },
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/index.tsx-loader-CyO-3mTy.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle",
+      "css": [
+        "assets/index-UeRzBi17.css"
+      ]
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "unlimitedStorage",
+    "scripting"
+  ],
+  "options_ui": {
+    "page": "src/pages/options/index.html",
+    "open_in_tab": true
+  },
+  "host_permissions": [
+    "<all_urls>",
+    "https://api.notion.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "assets/index-RFwyqNcS.js",
+        "assets/trash-2-CI0Evayg.js",
+        "assets/notion-RaI4tsVF.js",
+        "assets/index.tsx-D5THNByg.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

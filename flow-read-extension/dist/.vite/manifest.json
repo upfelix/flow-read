@@ -1,0 +1,86 @@
+{
+  "../../../../../@crx/manifest": {
+    "file": "assets/crx-manifest.js-8bsZEtiL.js",
+    "name": "crx-manifest.js",
+    "src": "../../../../../@crx/manifest",
+    "isEntry": true
+  },
+  "_index-!~{005}~.js": {
+    "file": "assets/index-UeRzBi17.css",
+    "src": "_index-!~{005}~.js"
+  },
+  "_index-B3H875R-.js": {
+    "file": "assets/index-B3H875R-.js",
+    "name": "index",
+    "imports": [
+      "_index-RFwyqNcS.js",
+      "_notion-RaI4tsVF.js"
+    ]
+  },
+  "_index-RFwyqNcS.js": {
+    "file": "assets/index-RFwyqNcS.js",
+    "name": "index",
+    "css": [
+      "assets/index-UeRzBi17.css"
+    ]
+  },
+  "_modulepreload-polyfill-B5Qt9EMX.js": {
+    "file": "assets/modulepreload-polyfill-B5Qt9EMX.js",
+    "name": "modulepreload-polyfill"
+  },
+  "_notion-RaI4tsVF.js": {
+    "file": "assets/notion-RaI4tsVF.js",
+    "name": "notion"
+  },
+  "_trash-2-CI0Evayg.js": {
+    "file": "assets/trash-2-CI0Evayg.js",
+    "name": "trash-2",
+    "imports": [
+      "_index-RFwyqNcS.js"
+    ]
+  },
+  "index.tsx-loader.js": {
+    "file": "assets/index.tsx-loader-CyO-3mTy.js",
+    "src": "index.tsx-loader.js"
+  },
+  "src/background/index.ts": {
+    "file": "assets/index.ts-cf1PCS7u.js",
+    "name": "index.ts",
+    "src": "src/background/index.ts",
+    "isEntry": true
+  },
+  "src/content/index.tsx": {
+    "file": "assets/index.tsx-D5THNByg.js",
+    "name": "index.tsx",
+    "src": "src/content/index.tsx",
+    "isEntry": true,
+    "imports": [
+      "_index-RFwyqNcS.js",
+      "_trash-2-CI0Evayg.js",
+      "_notion-RaI4tsVF.js"
+    ]
+  },
+  "src/pages/library/index.html": {
+    "file": "assets/library-B4GqYDJi.js",
+    "name": "library",
+    "src": "src/pages/library/index.html",
+    "isEntry": true,
+    "imports": [
+      "_modulepreload-polyfill-B5Qt9EMX.js",
+      "_index-RFwyqNcS.js",
+      "_trash-2-CI0Evayg.js"
+    ]
+  },
+  "src/pages/options/index.html": {
+    "file": "assets/index.html-Dcz2R3m0.js",
+    "name": "index.html",
+    "src": "src/pages/options/index.html",
+    "isEntry": true,
+    "imports": [
+      "_modulepreload-polyfill-B5Qt9EMX.js",
+      "_index-B3H875R-.js",
+      "_index-RFwyqNcS.js",
+      "_notion-RaI4tsVF.js"
+    ]
+  }
+}

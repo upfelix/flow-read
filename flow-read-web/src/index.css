@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Simple highlight styles */
+.fr-highlight-yellow {
+  background-color: #fff3a3;
+}
+
+.fr-image-captured {
+  outline: 3px solid #facc15; /* yellow-400 */
+  outline-offset: 2px;
+  border-radius: 4px;
+}
