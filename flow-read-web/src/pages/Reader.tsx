@@ -18,42 +18,44 @@ export const Reader = () => {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const articleRef = useRef<HTMLDivElement | null>(null);
 
-  const getNodePath = useCallback((root: Node, node: Node) => {
-    const path: number[] = [];
-    let current: Node | null = node;
-    while (current && current !== root) {
-      const parentNode: Node | null = current.parentNode;
-      if (!parentNode) return null;
-      const index = Array.prototype.indexOf.call(parentNode.childNodes, current) as number;
-      if (index < 0) return null;
-      path.unshift(index);
-      current = parentNode;
+  const getGlobalTextOffset = useCallback((root: Node, container: Node, offset: number) => {
+    try {
+      const r = document.createRange();
+      r.setStart(root, 0);
+      r.setEnd(container, offset);
+      return r.toString().length;
+    } catch {
+      return 0;
     }
-    if (current !== root) return null;
-    return path;
   }, []);
 
-  const getNodeByPath = useCallback((root: Node, path?: number[]) => {
-    if (!path) return null;
-    let current: Node | null = root;
-    for (const index of path) {
-      if (!current || !current.childNodes || index < 0 || index >= current.childNodes.length) {
-        return null;
+  const createRangeFromGlobalOffsets = useCallback((root: Node, start: number, end: number) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode() as Text | null;
+    let acc = 0;
+    let startNode: Text | null = null;
+    let endNode: Text | null = null;
+    let startOffset = 0;
+    let endOffset = 0;
+
+    while (current) {
+      const len = current.textContent?.length ?? 0;
+      const nextAcc = acc + len;
+      if (!startNode && start <= nextAcc) {
+        startNode = current;
+        startOffset = Math.max(0, start - acc);
       }
-      current = current.childNodes[index];
+      if (!endNode && end <= nextAcc) {
+        endNode = current;
+        endOffset = Math.max(0, end - acc);
+        break;
+      }
+      acc = nextAcc;
+      current = walker.nextNode() as Text | null;
     }
-    return current;
-  }, []);
 
-  const createRangeFromHighlight = useCallback((item: Highlight) => {
-    const root = articleRef.current;
-    if (!root || item.type !== 'text') return null;
-    const startNode = getNodeByPath(root, item.startPath);
-    const endNode = getNodeByPath(root, item.endPath);
     if (!startNode || !endNode) return null;
     const range = document.createRange();
-    const startOffset = Math.max(0, Math.min(item.startOffset ?? 0, startNode.textContent?.length ?? 0));
-    const endOffset = Math.max(0, Math.min(item.endOffset ?? 0, endNode.textContent?.length ?? 0));
     try {
       range.setStart(startNode, startOffset);
       range.setEnd(endNode, endOffset);
@@ -61,7 +63,7 @@ export const Reader = () => {
     } catch {
       return null;
     }
-  }, [getNodeByPath]);
+  }, []);
 
   const getOrderPos = useCallback((node: Node, offset = 0) => {
     const root = articleRef.current;
@@ -122,7 +124,7 @@ export const Reader = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
 
-      const range = sel.getRangeAt(0).cloneRange();
+      const range = sel.getRangeAt(0);
       // Ensure selection is within the article content
       if (!el.contains(range.commonAncestorContainer)) return;
 
@@ -130,26 +132,13 @@ export const Reader = () => {
       if (!text) return;
 
       const highlightId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      let pos = getOrderPos(range.startContainer, range.startOffset);
       const root = articleRef.current;
-      const startPath = root ? getNodePath(root, range.startContainer) : null;
-      const endPath = root ? getNodePath(root, range.endContainer) : null;
-
-      const wrapper = document.createElement('mark');
-      wrapper.className = 'fr-highlight-yellow';
-      wrapper.dataset.highlightId = highlightId;
-
-      try {
-        const fragment = range.extractContents();
-        wrapper.appendChild(fragment);
-        range.insertNode(wrapper);
-        pos = getOrderPos(wrapper, 0);
-      } catch {
-        // Fallback for unsupported range operations
-        if (typeof document.execCommand === 'function') {
-          document.execCommand('HiliteColor', false, '#FFF3A3');
-        }
-      }
+      if (!root) return;
+      const startGlobal = getGlobalTextOffset(root, range.startContainer, range.startOffset);
+      const endGlobal = getGlobalTextOffset(root, range.endContainer, range.endOffset);
+      const startOffset = Math.min(startGlobal, endGlobal);
+      const endOffset = Math.max(startGlobal, endGlobal);
+      if (endOffset <= startOffset) return;
 
       const item: Highlight = {
         id: highlightId,
@@ -157,11 +146,9 @@ export const Reader = () => {
         text,
         color: 'yellow',
         createdAt: Date.now(),
-        pos,
-        startPath: startPath ?? undefined,
-        startOffset: range.startOffset,
-        endPath: endPath ?? undefined,
-        endOffset: range.endOffset,
+        pos: startOffset,
+        startOffset,
+        endOffset,
       };
 
       appendHighlight(item);
@@ -181,17 +168,27 @@ export const Reader = () => {
       el.removeEventListener('mouseup', onPointerUp);
       el.removeEventListener('touchend', onPointerUp);
     };
-  }, [article, appendHighlight, getOrderPos]);
+  }, [article, appendHighlight, getGlobalTextOffset]);
 
-  // Re-apply text highlights after React updates to keep them until refresh.
+  // Repaint text highlights from state to ensure they never disappear after rerender.
   useEffect(() => {
     const el = articleRef.current;
     if (!el) return;
-    const textHighlights = sortedHighlights.filter((h) => h.type === 'text');
+    const existingMarks = el.querySelectorAll('mark.fr-highlight-yellow[data-highlight-id]');
+    existingMarks.forEach((mark) => {
+      const parent = mark.parentNode;
+      if (!parent) return;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
+      parent.normalize();
+    });
+
+    const textHighlights = sortedHighlights
+      .filter((h) => h.type === 'text' && typeof h.startOffset === 'number' && typeof h.endOffset === 'number')
+      .sort((a, b) => (b.startOffset! - a.startOffset!));
+
     textHighlights.forEach((item) => {
-      const existing = el.querySelector(`mark[data-highlight-id="${item.id}"]`);
-      if (existing) return;
-      const range = createRangeFromHighlight(item);
+      const range = createRangeFromGlobalOffsets(el, item.startOffset!, item.endOffset!);
       if (!range || range.collapsed) return;
       const wrapper = document.createElement('mark');
       wrapper.className = 'fr-highlight-yellow';
@@ -201,10 +198,9 @@ export const Reader = () => {
         wrapper.appendChild(fragment);
         range.insertNode(wrapper);
       } catch {
-        // Skip invalid range restoration.
       }
     });
-  }, [article, createRangeFromHighlight, sortedHighlights]);
+  }, [article, createRangeFromGlobalOffsets, sortedHighlights]);
 
   // Click image -> add to notes
   useEffect(() => {
