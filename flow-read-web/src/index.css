@@ -10,16 +10,18 @@
 
 /* Custom Highlight Styles */
 .fr-highlight-yellow {
-  background-color: rgba(255, 243, 163, 0.6); /* More subtle yellow */
-  border-bottom: 2px solid #fcd34d;
-  padding: 2px 0;
+  background-color: #fff3a3;
+  border-bottom: 2px solid #f59e0b;
+  padding: 0 1px;
   border-radius: 2px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  color: inherit;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .fr-highlight-yellow:hover {
-  background-color: rgba(255, 243, 163, 0.9);
+  background-color: #fde68a;
+  border-bottom-color: #d97706;
 }
 
 .fr-image-captured {

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Highlighter, Copy, Share, ChevronRight, PenTool } from 'lucide-react';
+import { ArrowLeft, Highlighter, Copy, ChevronRight, PenTool } from 'lucide-react';
 import { api } from '../api';
 import type { Article } from '../api';
 import type { Highlight, NoteData } from '../types';
@@ -17,6 +17,14 @@ export const Reader = () => {
   const [panelOpen, setPanelOpen] = useState(true);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const articleRef = useRef<HTMLDivElement | null>(null);
+
+  const appendHighlight = useCallback((item: Highlight) => {
+    setHighlights((prev) => {
+      const next = [...prev, item];
+      return next.sort((a, b) => (a.pos || 0) - (b.pos || 0));
+    });
+    setPanelOpen(true);
+  }, []);
 
   useEffect(() => {
     if (!url) {
@@ -40,7 +48,7 @@ export const Reader = () => {
     fetchArticle();
   }, [url]);
 
-  // Selection -> highlight text (Most robust approach using designMode)
+  // Selection -> highlight text
   useEffect(() => {
     const el = articleRef.current;
     if (!el) return;
@@ -49,25 +57,34 @@ export const Reader = () => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
 
-      const range = sel.getRangeAt(0);
+      const range = sel.getRangeAt(0).cloneRange();
       // Ensure selection is within the article content
       if (!el.contains(range.commonAncestorContainer)) return;
 
       const text = sel.toString().trim();
       if (!text) return;
 
-      // The most bulletproof way to highlight across complex DOM structures
-      // is to use the browser's native text editing engine.
-      document.designMode = "on";
-      document.execCommand("backColor", false, "#FFF3A3");
-      document.designMode = "off";
+      const highlightId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      let pos = range.getBoundingClientRect().top + window.scrollY;
 
-      // Calculate position for ordering in the sidebar
-      const rect = range.getBoundingClientRect();
-      const pos = rect.top + window.scrollY;
+      const wrapper = document.createElement('mark');
+      wrapper.className = 'fr-highlight-yellow';
+      wrapper.dataset.highlightId = highlightId;
+
+      try {
+        const fragment = range.extractContents();
+        wrapper.appendChild(fragment);
+        range.insertNode(wrapper);
+        pos = wrapper.getBoundingClientRect().top + window.scrollY;
+      } catch {
+        // Fallback for unsupported range operations
+        if (typeof document.execCommand === 'function') {
+          document.execCommand('HiliteColor', false, '#FFF3A3');
+        }
+      }
 
       const item: Highlight = {
-        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: highlightId,
         type: 'text',
         text,
         color: 'yellow',
@@ -75,25 +92,24 @@ export const Reader = () => {
         pos,
       };
 
-      setHighlights((prev) => {
-        const newArr = [...prev, item];
-        // Sort by position top to bottom
-        return newArr.sort((a, b) => (a.pos || 0) - (b.pos || 0));
-      });
-      
+      appendHighlight(item);
       sel.removeAllRanges(); // Clear selection
-      setPanelOpen(true); // Open panel to show feedback
     };
 
-    // Listen to mouseup and touchend for selection completion
-    el.addEventListener('mouseup', () => setTimeout(handleSelection, 10));
-    el.addEventListener('touchend', () => setTimeout(handleSelection, 10));
-    
-    return () => {
-      el.removeEventListener('mouseup', () => setTimeout(handleSelection, 10));
-      el.removeEventListener('touchend', () => setTimeout(handleSelection, 10));
+    const onPointerUp = () => {
+      // Wait for browser selection state to settle.
+      window.setTimeout(handleSelection, 0);
     };
-  }, [article]);
+
+    // Listen to selection completion
+    el.addEventListener('mouseup', onPointerUp);
+    el.addEventListener('touchend', onPointerUp);
+
+    return () => {
+      el.removeEventListener('mouseup', onPointerUp);
+      el.removeEventListener('touchend', onPointerUp);
+    };
+  }, [article, appendHighlight]);
 
   // Click image -> add to notes
   useEffect(() => {
@@ -112,12 +128,14 @@ export const Reader = () => {
       const src = img.currentSrc || img.getAttribute('src') || '';
       if (!src) return;
 
-      if (img.classList.contains('fr-image-captured')) return;
-      
       img.classList.add('fr-image-captured');
+      if (img.dataset.frImageNoteId) return;
+
+      const noteId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      img.dataset.frImageNoteId = noteId;
 
       const item: Highlight = {
-        id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: noteId,
         type: 'image',
         text: img.alt || 'Image',
         imageUrl: src,
@@ -126,16 +144,27 @@ export const Reader = () => {
         pos: img.getBoundingClientRect().top + window.scrollY,
       };
 
-      setHighlights((prev) => {
-        const newArr = [...prev, item];
-        return newArr.sort((a, b) => (a.pos || 0) - (b.pos || 0));
-      });
-      setPanelOpen(true);
+      appendHighlight(item);
     };
 
     el.addEventListener('click', onClick, { capture: true });
     return () => el.removeEventListener('click', onClick, { capture: true });
-  }, [article]);
+  }, [article, appendHighlight]);
+
+  // Re-apply image captured outline after React updates/content refresh.
+  useEffect(() => {
+    const el = articleRef.current;
+    if (!el) return;
+    const captured = new Set(
+      highlights.filter((h) => h.type === 'image').map((h) => h.imageUrl).filter(Boolean),
+    );
+    if (captured.size === 0) return;
+    const imgs = el.querySelectorAll('img');
+    imgs.forEach((img) => {
+      const src = (img as HTMLImageElement).currentSrc || img.getAttribute('src') || '';
+      if (captured.has(src)) img.classList.add('fr-image-captured');
+    });
+  }, [article, highlights]);
 
   const noteData: NoteData | null = useMemo(() => {
     if (!article) return null;
@@ -296,7 +325,7 @@ export const Reader = () => {
             </div>
           ) : (
             <ul className="space-y-4">
-              {highlights.map((h, i) => (
+              {highlights.map((h) => (
                 <li key={h.id} className="group relative">
                   <div className="absolute -left-3 top-2 w-1 h-full bg-slate-100 rounded-full group-hover:bg-blue-100 transition-colors"></div>
                   {h.type === 'image' ? (
