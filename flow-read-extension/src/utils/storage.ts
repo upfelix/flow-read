@@ -9,6 +9,9 @@ export interface Highlight {
   color: HighlightColor;
   createdAt: number;
   pos?: number;
+  // 文本高亮的稳定锚点：基于全文字符偏移，便于重渲染/重开后恢复
+  startOffset?: number;
+  endOffset?: number;
 }
 
 export interface NoteData {

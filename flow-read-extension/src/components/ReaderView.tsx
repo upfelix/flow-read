@@ -26,6 +26,94 @@ const COLORS: { value: HighlightColor; label: string; bg: string }[] = [
   { value: 'blue', label: 'Blue', bg: '#bbdefb' },
 ];
 
+const getRangeGlobalOffset = (
+  root: Node,
+  targetNode: Node,
+  targetOffset: number,
+): number => {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let total = 0;
+
+  while (walker.nextNode()) {
+    const current = walker.currentNode;
+    const textLength = current.textContent?.length ?? 0;
+    if (current === targetNode) {
+      return total + targetOffset;
+    }
+    total += textLength;
+  }
+
+  return -1;
+};
+
+const createRangeFromGlobalOffsets = (
+  root: Node,
+  start: number,
+  end: number,
+): Range | null => {
+  if (start < 0 || end <= start) return null;
+
+  const range = document.createRange();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let total = 0;
+  let startNode: Node | null = null;
+  let endNode: Node | null = null;
+  let startNodeOffset = 0;
+  let endNodeOffset = 0;
+
+  while (walker.nextNode()) {
+    const current = walker.currentNode;
+    const textLength = current.textContent?.length ?? 0;
+    const nextTotal = total + textLength;
+
+    if (!startNode && start >= total && start <= nextTotal) {
+      startNode = current;
+      startNodeOffset = start - total;
+    }
+
+    if (!endNode && end >= total && end <= nextTotal) {
+      endNode = current;
+      endNodeOffset = end - total;
+      break;
+    }
+
+    total = nextTotal;
+  }
+
+  if (!startNode || !endNode) return null;
+  range.setStart(startNode, startNodeOffset);
+  range.setEnd(endNode, endNodeOffset);
+  return range;
+};
+
+const createRangeFromText = (root: Node, targetText: string): Range | null => {
+  const normalized = targetText.trim();
+  if (!normalized) return null;
+
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let fullText = '';
+  while (walker.nextNode()) {
+    fullText += walker.currentNode.textContent ?? '';
+  }
+
+  const start = fullText.indexOf(normalized);
+  if (start < 0) return null;
+  const end = start + normalized.length;
+  return createRangeFromGlobalOffsets(root, start, end);
+};
+
+const unwrapHighlightSpans = (root: HTMLElement) => {
+  const spans = root.querySelectorAll('span.flow-read-highlight');
+  spans.forEach((span) => {
+    const parent = span.parentNode;
+    if (!parent) return;
+    while (span.firstChild) {
+      parent.insertBefore(span.firstChild, span);
+    }
+    parent.removeChild(span);
+  });
+};
+
 const ReaderView: React.FC<ReaderViewProps> = ({ article, onClose, isVisible }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
@@ -83,6 +171,57 @@ const ReaderView: React.FC<ReaderViewProps> = ({ article, onClose, isVisible }) 
     }
   }, [highlights, article]);
 
+  // 根据 highlights 状态重绘 DOM，保证高亮可持久恢复
+  useEffect(() => {
+    if (!isVisible || !article || !contentRef.current) return;
+    const articleEl = contentRef.current.querySelector('.flow-read-content') as HTMLElement | null;
+    if (!articleEl) return;
+
+    // 先清理旧高亮，再按状态重建，避免重复包裹
+    unwrapHighlightSpans(articleEl);
+    articleEl.querySelectorAll('img').forEach((img) => {
+      img.style.outline = '';
+      delete (img as HTMLImageElement).dataset.flowReadHighlightId;
+    });
+
+    const orderedTextHighlights = highlights
+      .filter((h) => h.type === 'text')
+      .sort((a, b) => {
+        const aStart = typeof a.startOffset === 'number' ? a.startOffset : Number.MAX_SAFE_INTEGER;
+        const bStart = typeof b.startOffset === 'number' ? b.startOffset : Number.MAX_SAFE_INTEGER;
+        return bStart - aStart;
+      });
+
+    orderedTextHighlights.forEach((h) => {
+      const range =
+        typeof h.startOffset === 'number' && typeof h.endOffset === 'number'
+          ? createRangeFromGlobalOffsets(articleEl, h.startOffset, h.endOffset)
+          : createRangeFromText(articleEl, h.text);
+      if (!range || range.collapsed) return;
+
+      const span = document.createElement('span');
+      span.className = `flow-read-highlight highlight-${h.color}`;
+      span.id = h.id;
+
+      try {
+        range.surroundContents(span);
+      } catch {
+        const extracted = range.extractContents();
+        span.appendChild(extracted);
+        range.insertNode(span);
+      }
+    });
+
+    const imageHighlights = highlights.filter((h) => h.type === 'image' && h.imageUrl);
+    imageHighlights.forEach((h) => {
+      const image = Array.from(articleEl.querySelectorAll('img')).find((img) => img.src === h.imageUrl);
+      if (!image) return;
+      image.style.outline = `4px solid ${COLORS.find((c) => c.value === h.color)?.bg || '#ffeb3b'}`;
+      image.style.transition = 'outline 0.2s';
+      (image as HTMLImageElement).dataset.flowReadHighlightId = h.id;
+    });
+  }, [highlights, isVisible, article]);
+
   // 处理图片点击
   const handleContentClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -93,23 +232,15 @@ const ReaderView: React.FC<ReaderViewProps> = ({ article, onClose, isVisible }) 
       
       // 检查是否已经添加过
       if (highlights.some(h => h.type === 'image' && h.imageUrl === src)) {
-        // 如果已存在，可以选择移除或者提示已存在
-        // 这里简单做一个“再次点击移除”的逻辑，或者只是提示
-        // 为了简单直观，我们做“再次点击移除”
         const existing = highlights.find(h => h.type === 'image' && h.imageUrl === src);
         if (existing) {
            deleteHighlight(existing.id);
-           img.style.outline = ''; // 移除高亮样式
         }
         return;
       }
 
       const highlightId = `image-${Date.now()}`;
-      
-      // 添加视觉反馈
-      img.style.outline = `4px solid ${COLORS.find(c => c.value === currentColor)?.bg || '#ffeb3b'}`;
-      img.style.transition = 'outline 0.2s';
-      
+
       const newHighlight: Highlight = {
         id: highlightId,
         type: 'image',
@@ -130,38 +261,39 @@ const ReaderView: React.FC<ReaderViewProps> = ({ article, onClose, isVisible }) 
     if (!selection || selection.isCollapsed) return;
 
     const text = selection.toString().trim();
-    if (text.length < 2) return;
+    if (text.length < 2) {
+      selection.removeAllRanges();
+      return;
+    }
 
     try {
       const range = selection.getRangeAt(0);
-      
-      // 检查选区是否在文章内容区域内
-      if (contentRef.current && contentRef.current.contains(range.commonAncestorContainer)) {
-        // 创建高亮 ID
-        const highlightId = `highlight-${Date.now()}`;
-        
-        // 创建高亮元素
-        const span = document.createElement('span');
-        span.className = `flow-read-highlight highlight-${currentColor}`;
-        span.id = highlightId;
-        
-        try {
-          range.surroundContents(span);
-          
-          const newHighlight: Highlight = {
-            id: highlightId,
-            type: 'text',
-            text: text,
-            color: currentColor,
-            createdAt: Date.now(),
-            pos: Math.round(window.scrollY + range.getBoundingClientRect().top),
-          };
+      const articleEl = contentRef.current?.querySelector('.flow-read-content');
+      if (!articleEl) return;
 
-          setHighlights(prev => [...prev, newHighlight]);
-          selection.removeAllRanges(); 
-        } catch (domError) {
-          console.warn('Cannot highlight across block elements', domError);
+      // 检查选区是否在文章内容区域内
+      if (articleEl.contains(range.commonAncestorContainer)) {
+        const startOffset = getRangeGlobalOffset(articleEl, range.startContainer, range.startOffset);
+        const endOffset = getRangeGlobalOffset(articleEl, range.endContainer, range.endOffset);
+        if (startOffset < 0 || endOffset <= startOffset) {
+          selection.removeAllRanges();
+          return;
         }
+
+        const highlightId = `highlight-${Date.now()}`;
+        const newHighlight: Highlight = {
+          id: highlightId,
+          type: 'text',
+          text,
+          color: currentColor,
+          createdAt: Date.now(),
+          pos: Math.round(window.scrollY + range.getBoundingClientRect().top),
+          startOffset,
+          endOffset,
+        };
+
+        setHighlights(prev => [...prev, newHighlight]);
+        selection.removeAllRanges();
       }
     } catch (e) {
       console.error('Highlight failed', e);
@@ -169,35 +301,10 @@ const ReaderView: React.FC<ReaderViewProps> = ({ article, onClose, isVisible }) 
   };
 
   const scrollToHighlight = (id: string) => {
-    // 对于图片，可能没有 ID 在 DOM 上 (因为我们没有替换 IMG 标签，只是加了 outline)
-    // 但是我们可以通过 src 找到图片，或者在添加时给图片加 id?
-    // 之前 text highlight 是加了 span id 的。
-    // 对于图片，我们在 click 时没有修改 DOM 的 id。
-    // 让我们尝试通过 ID 查找 (如果之前 text highlight 逻辑适用)，或者改进图片查找逻辑。
-    
-    // 其实更好的方式是：在 handleContentClick 里给 img 设一个 id 或者 data-highlight-id
-    // 但是 React 重新渲染 dangerouslySetInnerHTML 可能会重置 DOM？
-    // 不会，除非 article 变了。ReaderView 挂载后 article 不变。
-    // 所以直接操作 DOM 是安全的。
-    
     let element = document.getElementById(id);
-    
-    // 如果没找到 (可能是图片)，尝试找对应 src 的图片 (这不太准)
-    // 或者我们在 handleContentClick 时就给 img 设置 id
+
     if (!element) {
-       // 尝试在 highlights 中找到该项
-       const h = highlights.find(item => item.id === id);
-       if (h && h.type === 'image' && h.imageUrl) {
-         // 在 contentRef 中查找该图片
-         const images = contentRef.current?.querySelectorAll('img');
-         if (images) {
-            images.forEach(img => {
-              if (img.src === h.imageUrl) {
-                element = img;
-              }
-            });
-         }
-       }
+      element = contentRef.current?.querySelector(`[data-flow-read-highlight-id="${id}"]`) ?? null;
     }
 
     if (element) {
@@ -225,32 +332,7 @@ const ReaderView: React.FC<ReaderViewProps> = ({ article, onClose, isVisible }) 
   };
 
   const deleteHighlight = (id: string) => {
-    const h = highlights.find(item => item.id === id);
     setHighlights(prev => prev.filter(item => item.id !== id));
-    
-    if (h?.type === 'image' && h.imageUrl) {
-         // 移除图片的 outline
-         const images = contentRef.current?.querySelectorAll('img');
-         if (images) {
-            images.forEach(img => {
-              if (img.src === h.imageUrl) {
-                img.style.outline = '';
-              }
-            });
-         }
-    } else {
-        // 移除文本高亮 DOM
-        const element = document.getElementById(id);
-        if (element) {
-          const parent = element.parentNode;
-          if (parent) {
-            while (element.firstChild) {
-              parent.insertBefore(element.firstChild, element);
-            }
-            parent.removeChild(element);
-          }
-        }
-    }
   };
 
   const copyNotes = () => {

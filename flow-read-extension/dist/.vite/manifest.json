@@ -40,7 +40,7 @@
     ]
   },
   "index.tsx-loader.js": {
-    "file": "assets/index.tsx-loader-CyO-3mTy.js",
+    "file": "assets/index.tsx-loader-C4lkMCey.js",
     "src": "index.tsx-loader.js"
   },
   "src/background/index.ts": {
@@ -50,7 +50,7 @@
     "isEntry": true
   },
   "src/content/index.tsx": {
-    "file": "assets/index.tsx-D5THNByg.js",
+    "file": "assets/index.tsx-B9Zx9xP8.js",
     "name": "index.tsx",
     "src": "src/content/index.tsx",
     "isEntry": true,

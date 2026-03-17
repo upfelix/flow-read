@@ -13,7 +13,7 @@
   "content_scripts": [
     {
       "js": [
-        "assets/index.tsx-loader-CyO-3mTy.js"
+        "assets/index.tsx-loader-C4lkMCey.js"
       ],
       "matches": [
         "<all_urls>"
@@ -47,7 +47,7 @@
         "assets/index-RFwyqNcS.js",
         "assets/trash-2-CI0Evayg.js",
         "assets/notion-RaI4tsVF.js",
-        "assets/index.tsx-D5THNByg.js"
+        "assets/index.tsx-B9Zx9xP8.js"
       ],
       "use_dynamic_url": false
     }
