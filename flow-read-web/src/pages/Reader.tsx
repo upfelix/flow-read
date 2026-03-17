@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Loader2, ArrowLeft, Highlighter, Copy, Share, ChevronRight, ChevronLeft, PenTool } from 'lucide-react';
+import { ArrowLeft, Highlighter, Copy, Share, ChevronRight, PenTool } from 'lucide-react';
 import { api } from '../api';
 import type { Article } from '../api';
 import type { Highlight, NoteData } from '../types';
@@ -40,7 +40,7 @@ export const Reader = () => {
     fetchArticle();
   }, [url]);
 
-  // Selection -> highlight text (Improved stability)
+  // Selection -> highlight text (Most robust approach using designMode)
   useEffect(() => {
     const el = articleRef.current;
     if (!el) return;
@@ -56,25 +56,16 @@ export const Reader = () => {
       const text = sel.toString().trim();
       if (!text) return;
 
-      // Create highlight span
-      const span = document.createElement('span');
-      span.className = 'fr-highlight-yellow';
-      
-      try {
-        // Attempt to surround contents
-        range.surroundContents(span);
-      } catch (e) {
-        // Fallback for complex selections (e.g. crossing block boundaries)
-        // This is a simplified fallback; for production robust highlighting, 
-        // a library like 'mark.js' or recursive wrapping is better.
-        // Here we just extract and re-insert to ensure valid DOM.
-        const frag = range.extractContents();
-        span.appendChild(frag);
-        range.insertNode(span);
-      }
+      // The most bulletproof way to highlight across complex DOM structures
+      // is to use the browser's native text editing engine.
+      document.designMode = "on";
+      document.execCommand("backColor", false, "#FFF3A3");
+      document.designMode = "off";
 
-      // Add to state
-      const pos = (span.getBoundingClientRect().top || 0) + window.scrollY;
+      // Calculate position for ordering in the sidebar
+      const rect = range.getBoundingClientRect();
+      const pos = rect.top + window.scrollY;
+
       const item: Highlight = {
         id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         type: 'text',
@@ -84,20 +75,25 @@ export const Reader = () => {
         pos,
       };
 
-      setHighlights((prev) => [...prev, item]);
+      setHighlights((prev) => {
+        const newArr = [...prev, item];
+        // Sort by position top to bottom
+        return newArr.sort((a, b) => (a.pos || 0) - (b.pos || 0));
+      });
+      
       sel.removeAllRanges(); // Clear selection
-      console.debug('[FlowRead] text highlighted:', item);
+      setPanelOpen(true); // Open panel to show feedback
     };
 
-    // Use pointerup for better mobile/desktop compatibility
-    const onPointerUp = () => {
-      // Small delay to let the selection finalize
-      setTimeout(handleSelection, 10);
+    // Listen to mouseup and touchend for selection completion
+    el.addEventListener('mouseup', () => setTimeout(handleSelection, 10));
+    el.addEventListener('touchend', () => setTimeout(handleSelection, 10));
+    
+    return () => {
+      el.removeEventListener('mouseup', () => setTimeout(handleSelection, 10));
+      el.removeEventListener('touchend', () => setTimeout(handleSelection, 10));
     };
-
-    el.addEventListener('pointerup', onPointerUp);
-    return () => el.removeEventListener('pointerup', onPointerUp);
-  }, [article]); // Re-bind when article loads
+  }, [article]);
 
   // Click image -> add to notes
   useEffect(() => {
@@ -110,18 +106,14 @@ export const Reader = () => {
       if (target.tagName !== 'IMG') return;
       
       const img = target as HTMLImageElement;
-      // Prevent default behavior (e.g. if wrapped in a link)
       e.preventDefault();
       e.stopPropagation();
 
       const src = img.currentSrc || img.getAttribute('src') || '';
       if (!src) return;
 
-      // Visual feedback
-      if (img.classList.contains('fr-image-captured')) {
-        // Optional: Toggle off? For now just keep it or maybe alert 'already added'
-        return;
-      }
+      if (img.classList.contains('fr-image-captured')) return;
+      
       img.classList.add('fr-image-captured');
 
       const item: Highlight = {
@@ -134,10 +126,11 @@ export const Reader = () => {
         pos: img.getBoundingClientRect().top + window.scrollY,
       };
 
-      setHighlights((prev) => [...prev, item]);
-      // Open panel to show feedback
+      setHighlights((prev) => {
+        const newArr = [...prev, item];
+        return newArr.sort((a, b) => (a.pos || 0) - (b.pos || 0));
+      });
       setPanelOpen(true);
-      console.debug('[FlowRead] image captured:', item);
     };
 
     el.addEventListener('click', onClick, { capture: true });
@@ -165,9 +158,29 @@ export const Reader = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#FDFBF7]">
-        <Loader2 className="animate-spin h-10 w-10 text-blue-600 mb-4" />
-        <p className="text-slate-500 animate-pulse font-serif">Loading your reading space...</p>
+      <div className="min-h-screen bg-[#FDFBF7] flex">
+        {/* Skeleton Loader matching article layout */}
+        <main className="max-w-3xl mx-auto px-6 py-12 sm:px-8 lg:px-12 w-full animate-pulse">
+          <div className="h-12 bg-slate-200 rounded-lg w-3/4 mb-6"></div>
+          <div className="flex gap-4 mb-10 border-b border-slate-100 pb-6">
+             <div className="h-5 bg-slate-200 rounded w-24"></div>
+             <div className="h-5 bg-slate-200 rounded w-16"></div>
+             <div className="h-5 bg-slate-200 rounded w-32"></div>
+          </div>
+          <div className="space-y-5">
+            <div className="h-4 bg-slate-200 rounded w-full"></div>
+            <div className="h-4 bg-slate-200 rounded w-full"></div>
+            <div className="h-4 bg-slate-200 rounded w-11/12"></div>
+            <div className="h-4 bg-slate-200 rounded w-full"></div>
+            <div className="h-4 bg-slate-200 rounded w-4/5 mb-8"></div>
+            
+            <div className="h-48 bg-slate-200 rounded-xl w-full my-8"></div>
+
+            <div className="h-4 bg-slate-200 rounded w-full"></div>
+            <div className="h-4 bg-slate-200 rounded w-10/12"></div>
+            <div className="h-4 bg-slate-200 rounded w-full"></div>
+          </div>
+        </main>
       </div>
     );
   }
