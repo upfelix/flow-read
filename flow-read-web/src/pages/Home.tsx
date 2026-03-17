@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, BookOpen, Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
-import { api } from '../api';
+import { api, API_BASE_URL } from '../api';
 
 export const Home = () => {
   const [url, setUrl] = useState('');
@@ -14,7 +13,7 @@ export const Home = () => {
     // quick backend connectivity check
     api.ping().then((ok) => {
       if (!ok) {
-        setError('后端未启动或不可访问：请确保 http://localhost:5000 正在运行');
+        setError(`后端未启动或不可访问 (${API_BASE_URL})`);
       }
     });
   }, []);
@@ -40,22 +39,22 @@ export const Home = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen bg-[#FDFBF7] flex flex-col items-center justify-center p-4">
+      <div className="max-w-md w-full space-y-10">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg transform rotate-3">
-            <BookOpen className="h-8 w-8 text-white" />
+          <div className="mx-auto h-20 w-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-xl transform -rotate-3 mb-8">
+            <BookOpen className="h-10 w-10 text-white" />
           </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900 tracking-tight">
-            FlowRead Web
+          <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight font-serif">
+            FlowRead
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Paste a link, enjoy distraction-free reading.
+          <p className="mt-4 text-lg text-slate-600 font-sans">
+            粘贴链接，享受极致纯净的阅读体验。
           </p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md shadow-sm -space-y-px">
+          <div className="rounded-xl shadow-lg bg-white p-2 border border-slate-100">
             <div>
               <label htmlFor="url" className="sr-only">Article URL</label>
               <input
@@ -63,7 +62,7 @@ export const Home = () => {
                 name="url"
                 type="url"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="appearance-none block w-full px-4 py-4 text-lg text-slate-900 placeholder-slate-400 focus:outline-none bg-transparent"
                 placeholder="https://example.com/article"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
@@ -75,20 +74,20 @@ export const Home = () => {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 transition-colors"
+              className="group relative w-full flex justify-center py-4 px-6 border border-transparent text-lg font-medium rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 active:translate-y-0"
             >
               {loading ? (
-                <Loader2 className="animate-spin h-5 w-5" />
+                <Loader2 className="animate-spin h-6 w-6" />
               ) : (
                 <span className="flex items-center">
-                  Start Reading
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  开始阅读
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </span>
               )}
             </button>
           </div>
           {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
+            <div className="text-red-500 text-sm text-center bg-red-50 py-2 rounded-lg border border-red-100">{error}</div>
           )}
         </form>
       </div>
