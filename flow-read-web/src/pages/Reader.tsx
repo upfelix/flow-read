@@ -18,10 +18,29 @@ export const Reader = () => {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const articleRef = useRef<HTMLDivElement | null>(null);
 
+  const getOrderPos = useCallback((node: Node, offset = 0) => {
+    const root = articleRef.current;
+    if (!root) return Date.now();
+    let index = 0;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL);
+    if (walker.currentNode === node) return index * 1000 + offset;
+    let current = walker.nextNode();
+    while (current) {
+      index += 1;
+      if (current === node) return index * 1000 + offset;
+      current = walker.nextNode();
+    }
+    return Date.now();
+  }, []);
+
   const appendHighlight = useCallback((item: Highlight) => {
     setHighlights((prev) => {
       const next = [...prev, item];
-      return next.sort((a, b) => (a.pos || 0) - (b.pos || 0));
+      return next.sort((a, b) => {
+        const ap = a.pos ?? a.createdAt;
+        const bp = b.pos ?? b.createdAt;
+        return ap - bp;
+      });
     });
     setPanelOpen(true);
   }, []);
@@ -65,7 +84,7 @@ export const Reader = () => {
       if (!text) return;
 
       const highlightId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      let pos = range.getBoundingClientRect().top + window.scrollY;
+      let pos = getOrderPos(range.startContainer, range.startOffset);
 
       const wrapper = document.createElement('mark');
       wrapper.className = 'fr-highlight-yellow';
@@ -75,7 +94,7 @@ export const Reader = () => {
         const fragment = range.extractContents();
         wrapper.appendChild(fragment);
         range.insertNode(wrapper);
-        pos = wrapper.getBoundingClientRect().top + window.scrollY;
+        pos = getOrderPos(wrapper, 0);
       } catch {
         // Fallback for unsupported range operations
         if (typeof document.execCommand === 'function') {
@@ -109,7 +128,7 @@ export const Reader = () => {
       el.removeEventListener('mouseup', onPointerUp);
       el.removeEventListener('touchend', onPointerUp);
     };
-  }, [article, appendHighlight]);
+  }, [article, appendHighlight, getOrderPos]);
 
   // Click image -> add to notes
   useEffect(() => {
@@ -141,7 +160,7 @@ export const Reader = () => {
         imageUrl: src,
         color: 'yellow',
         createdAt: Date.now(),
-        pos: img.getBoundingClientRect().top + window.scrollY,
+        pos: getOrderPos(img, 0),
       };
 
       appendHighlight(item);
@@ -149,7 +168,7 @@ export const Reader = () => {
 
     el.addEventListener('click', onClick, { capture: true });
     return () => el.removeEventListener('click', onClick, { capture: true });
-  }, [article, appendHighlight]);
+  }, [article, appendHighlight, getOrderPos]);
 
   // Re-apply image captured outline after React updates/content refresh.
   useEffect(() => {
